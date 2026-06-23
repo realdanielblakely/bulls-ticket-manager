@@ -1,0 +1,10 @@
+.env
+bulls.db
+bulls.db-shm
+bulls.db-wal
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+venv/
+.venv/
