@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.bullsticketmanager.app</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__APP_DIR__/.venv/bin/python</string>
+        <string>-m</string>
+        <string>app.main</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__APP_DIR__</string>
+
+    <!-- Start at login and restart if the bot ever exits -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Don't hammer Discord if it crash-loops -->
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <key>StandardOutPath</key>
+    <string>__APP_DIR__/logs/bot.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>__APP_DIR__/logs/bot.err.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin</string>
+    </dict>
+</dict>
+</plist>
