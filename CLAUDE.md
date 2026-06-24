@@ -55,6 +55,7 @@ Bot name: **set in the Discord developer portal**
 - `skip tue, thu` — skip specific days, rest auto-attending
 - `listed all` / `listed tue, 4/2` — confirm games are live on TM
 - `sold tue` — mark a listed game sold
+- `link 4/2 <url>` — save the Ticketmaster per-game sell link (per date)
 - `status` — next 7 games + statuses
 - `help`
 - Weekly cron: **Sunday 10:00 AM ET**
@@ -72,10 +73,15 @@ Bot name: **set in the Discord developer portal**
 | `app/dashboard/` | FastAPI + Jinja2 season view |
 | `schedule.csv` | 75 home games (Mar 31 – Sep 13 2026) |
 
-## Open Item
-`TICKETMASTER_SELL_URL` defaults to the TM "My Events" page. Confirm whether a
-working **per-event sell deep link** exists for the account during testing and
-set it in `.env` — that's the piece that makes the manual step near-effortless.
+## Sell-link test (open item)
+The bot can hold a real **per-game** Ticketmaster sell link (`games.tm_sell_url`,
+set via the `link 4/2 <url>` Discord command) and uses it in the prep message,
+falling back to the generic `TICKETMASTER_SELL_URL` page when none is saved.
+
+Whether per-game deep links actually survive being re-opened is the one thing we
+can't confirm from code — it needs the logged-in TM account. See
+[`TESTING.md`](TESTING.md) for the 2-minute procedure, and
+`python -m scripts.check_sell_links` to see which games have a saved link.
 
 ## History
 Originally designed around a StubHub seller API (`app/stubhub/`, never finished).

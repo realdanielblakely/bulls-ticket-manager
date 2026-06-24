@@ -41,6 +41,7 @@ def create_tables() -> None:
                 status              TEXT DEFAULT 'upcoming',
                 listed_price        REAL,
                 sold_price          REAL,
+                tm_sell_url         TEXT,
                 created_at          TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at          TEXT DEFAULT CURRENT_TIMESTAMP
             );
@@ -53,6 +54,15 @@ def create_tables() -> None:
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
         """)
+    # Additive migrations — safe to re-run (no-op if the column already exists)
+    with get_connection() as conn:
+        for migration_sql in [
+            "ALTER TABLE games ADD COLUMN tm_sell_url TEXT",
+        ]:
+            try:
+                conn.execute(migration_sql)
+            except sqlite3.OperationalError:
+                pass  # column already exists
 
 
 # ---------------------------------------------------------------------------
@@ -91,6 +101,15 @@ def update_game_status(game_id: int, status: str) -> None:
         conn.execute(
             "UPDATE games SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (status, game_id),
+        )
+
+
+def set_game_tm_url(game_id: int, url: str) -> None:
+    """Store the Ticketmaster 'sell this game' link for one game."""
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE games SET tm_sell_url=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (url, game_id),
         )
 
 

@@ -37,6 +37,27 @@ def _short(g: sqlite3.Row) -> str:
     return f"{g['day_of_week'][:3]} {d.month}/{d.day}"
 
 
+def _row_get(row: sqlite3.Row, key: str) -> str | None:
+    """Safe column access — returns None if the column isn't present/set."""
+    try:
+        return row[key]
+    except (IndexError, KeyError):
+        return None
+
+
+def sell_url(game: sqlite3.Row) -> tuple[str, bool]:
+    """
+    Resolve where to send the owner to list this game.
+
+    Returns (url, is_specific). is_specific=True when we have a per-game
+    Ticketmaster 'sell' link on record; otherwise the generic account page.
+    """
+    url = _row_get(game, "tm_sell_url")
+    if url:
+        return url, True
+    return settings.ticketmaster_sell_url, False
+
+
 def build_prep_message(skip_games: list[sqlite3.Row]) -> str:
     """
     Build the 'ready to list on Ticketmaster' message for skipped games.
@@ -48,12 +69,19 @@ def build_prep_message(skip_games: list[sqlite3.Row]) -> str:
         return ""
 
     lines = ["", "🏷️ **Ready to list on Ticketmaster:**", ""]
+    any_generic = False
     for g in skip_games:
         lines.append(f"  **{_short(g)}** vs {g['opponent']}")
         for i, pair in enumerate(settings.seat_pairs):
             price = suggested_price(i, g["day_of_week"])
             lines.append(f"    • Pair {i + 1} (Sec {pair.section}/Row {pair.row}): ${price:.0f}")
+        url, is_specific = sell_url(g)
+        if is_specific:
+            lines.append(f"    → List this game: {url}")
+        else:
+            any_generic = True
     lines.append("")
-    lines.append(f"List them here → {settings.ticketmaster_sell_url}")
+    if any_generic:
+        lines.append(f"List them here → {settings.ticketmaster_sell_url}")
     lines.append("Then reply `listed all` (or `listed Tue, Thu`) once they're up.")
     return "\n".join(lines)

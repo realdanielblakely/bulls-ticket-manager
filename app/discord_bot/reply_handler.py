@@ -34,6 +34,7 @@ from app.database import (
     mark_listed,
     mark_sold,
     next_week_bounds,
+    set_game_tm_url,
     update_game_status,
 )
 from app.listing.prep import build_prep_message, game_avg_price
@@ -152,6 +153,7 @@ HELP_TEXT = """
 `listed all`        → confirm you listed them on Ticketmaster
 `listed Tue, 4/2`   → confirm specific games are listed
 `sold Tue`          → mark a game's tickets sold (feeds P&L)
+`link 4/2 <url>`    → save the TM sell link for that game
 `status`            → show next week's current decisions
 `help`              → show this message
 
@@ -161,7 +163,8 @@ send you the price + a link, you finish in the TM app, then reply `listed`.
 
 
 async def handle_reply(message: discord.Message) -> None:
-    text = message.content.strip().lower()
+    raw = message.content.strip()
+    text = raw.lower()
     monday, sunday = next_week_bounds()
     games = get_games_for_week(monday, sunday)
 
@@ -174,6 +177,32 @@ async def handle_reply(message: discord.Message) -> None:
     if text == "status":
         upcoming = get_next_games(limit=7)
         await message.channel.send(_build_status_message(upcoming))
+        return
+
+    # --- link <date> <url> --- save the Ticketmaster sell link for one game
+    if text.startswith("link"):
+        m = re.search(r"https?://\S+", raw)  # use raw — keep URL case intact
+        if not m:
+            await message.channel.send("To save a sell link: `link 4/2 https://...`")
+            return
+        url = m.group(0)
+        selector = raw[: m.start()]  # text before the url (excludes the url's own digits)
+        dates = set(_parse_dates(selector))
+        if not dates:
+            await message.channel.send("Use a date so I know which game: `link 4/2 https://...`")
+            return
+        candidates = get_next_games(limit=400)  # whole rest of the season
+        targets = [
+            g for g in candidates
+            if (date.fromisoformat(g["date"]).month, date.fromisoformat(g["date"]).day) in dates
+        ]
+        if not targets:
+            await message.channel.send("No upcoming game matches that date. Check `status`.")
+            return
+        for g in targets:
+            set_game_tm_url(g["id"], url)
+            log_activity(g["id"], "tm_url_set", {"url": url})
+        await message.channel.send(_confirm_summary("Saved sell link for", targets))
         return
 
     # --- sold <days/dates/all> ---  (check before 'listed'/'skip')
