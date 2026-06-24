@@ -80,13 +80,20 @@ NOT ticketmaster.com). Confirmed by testing:
 - Each game **does** have a deep-linkable page: `{base}/{event_id}`
   (e.g. `.../my-events/1459` = Jun 30). "Sell" is one tap from there.
 
-So the bot stores each game's **event id** (`games.tm_event_id`), set via the
-`link 6/30 1459` command (accepts a bare id or a full URL), and the prep message
-links to `settings.event_url(event_id)`, falling back to the My Events list page
-(`TICKETMASTER_BASE_URL`) when no id is saved. Known id: **Jun 30 = 1459**.
+So the bot stores each game's **event id** (`games.tm_event_id`) and the prep
+message links to `settings.event_url(event_id)`, falling back to the My Events
+list page (`TICKETMASTER_BASE_URL`) when no id is saved.
 
-See [`TESTING.md`](TESTING.md); `python -m scripts.check_sell_links` lists which
-games have an id saved.
+Ids live in `schedule.csv` (committed source of truth, `tm_event_id` column) and
+`csv_import` syncs them into the DB without disturbing status. All 33 remaining
+2026 home games (Jun 30 – Sep 13) are loaded. They are **not** sequential by date
+(Jun 30 = 1459, Jul 1 = 1416), so they must be captured, not computed.
+
+To (re)load from a saved My Events page:
+`python -m scripts.load_event_ids "My Events _ Durham Bulls.html"`.
+To fix one game ad hoc: `link 6/30 1459` in Discord (bare id or full URL).
+`python -m scripts.check_sell_links` lists which games have an id. See
+[`TESTING.md`](TESTING.md). Saved `.html` pages are gitignored.
 
 ## History
 Originally designed around a StubHub seller API (`app/stubhub/`, never finished).

@@ -7,8 +7,12 @@ The CSV must have columns: date, day_of_week, time, opponent
   - time: e.g. "6:45 PM"
   - opponent: e.g. "Lehigh Valley IronPigs"
 
-Running this multiple times is safe — existing rows (matched by date) are
-never overwritten, so skip/attend decisions are preserved.
+Optional column:
+  - tm_event_id: Ticketmaster Account Manager event id for that game
+
+Running this multiple times is safe — existing rows (matched by date) keep their
+status (skip/attend/sold), so decisions are preserved. Only tm_event_id is
+refreshed from the CSV when present.
 """
 
 from __future__ import annotations
@@ -39,6 +43,7 @@ def import_schedule(csv_path: str | None = None) -> int:
                 day_of_week = row["day_of_week"].strip()
                 time = row["time"].strip()
                 opponent = row["opponent"].strip()
+                tm_event_id = (row.get("tm_event_id") or "").strip()
 
                 if not all([date, day_of_week, time, opponent]):
                     continue  # skip blank rows
@@ -52,6 +57,13 @@ def import_schedule(csv_path: str | None = None) -> int:
                 )
                 if cursor.rowcount:
                     inserted += 1
+
+                # Refresh the event id from the CSV without disturbing status.
+                if tm_event_id:
+                    conn.execute(
+                        "UPDATE games SET tm_event_id = ? WHERE date = ?",
+                        (tm_event_id, date),
+                    )
 
     if inserted:
         log_activity(None, "schedule_imported", {"rows_inserted": inserted, "source": path})

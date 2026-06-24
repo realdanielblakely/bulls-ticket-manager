@@ -16,31 +16,32 @@ What the testing turned up:
 *Sell* is one tap from there. The bot stores each game's event id and builds the
 link as `{base}/{event_id}`.
 
-## How to give the bot a game's link
+## Current status: all ids loaded
 
-When you're on a game's page, copy the number at the end of the URL (or the whole
-URL) and send the bot:
+Every remaining home game (Jun 30 → Sep 13 2026, 33 games) already has its event
+id saved in `schedule.csv` and the database, so the weekly prep message links
+straight to each game's page. Nothing to do for the rest of this season.
+
+## Refreshing ids (e.g. next season, or if links change)
+
+1. In a logged-in browser, open
+   `https://am.ticketmaster.com/durhambulls/my-events`
+2. Save it: **File → Save Page As → "Webpage, Complete"** into the repo folder.
+3. Run the loader (parses the page, writes ids into `schedule.csv`, syncs the DB):
+   ```bash
+   .venv/bin/python -m scripts.load_event_ids "My Events _ Durham Bulls.html"
+   ```
+   It's idempotent and never touches skip/attend/sold decisions.
+
+## Fixing a single game by hand
+
+If one game's id is missing or wrong, set it from Discord — copy the number at
+the end of that game's URL (or paste the whole URL):
 
 ```
 link 6/30 1459
-```
-or
-```
 link 6/30 https://am.ticketmaster.com/durhambulls/my-events/1459
 ```
-
-Both save event id `1459` for the June 30 game. After that, the weekly prep
-message links you straight to that game's page.
-
-## Getting the rest of the ids
-
-You only need ids for games you actually sell, and the weekly prompt surfaces
-just a handful at a time — so the easiest path is to add one with `link` each
-week as games come up. If you'd rather do them all at once, open the My Events
-list and grab the trailing number from each game's page; or send me the list and
-I'll bulk-load them.
-
-(Known so far: **Jun 30 = 1459**, already saved.)
 
 ## Checking what's saved
 

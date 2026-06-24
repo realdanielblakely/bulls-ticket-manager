@@ -8,3 +8,7 @@ __pycache__/
 .DS_Store
 venv/
 .venv/
+
+# Saved Ticketmaster "My Events" pages — only used to extract event ids
+My Events*.html
+My Events*_files/
