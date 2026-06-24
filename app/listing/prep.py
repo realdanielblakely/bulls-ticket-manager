@@ -49,13 +49,14 @@ def sell_url(game: sqlite3.Row) -> tuple[str, bool]:
     """
     Resolve where to send the owner to list this game.
 
-    Returns (url, is_specific). is_specific=True when we have a per-game
-    Ticketmaster 'sell' link on record; otherwise the generic account page.
+    Returns (url, is_specific). is_specific=True when we have this game's
+    Ticketmaster event id on record (links straight to the game page, where
+    'Sell' is one tap); otherwise the generic My Events list page.
     """
-    url = _row_get(game, "tm_sell_url")
-    if url:
-        return url, True
-    return settings.ticketmaster_sell_url, False
+    event_id = _row_get(game, "tm_event_id")
+    if event_id:
+        return settings.event_url(event_id), True
+    return settings.ticketmaster_base_url, False
 
 
 def build_prep_message(skip_games: list[sqlite3.Row]) -> str:
@@ -77,11 +78,11 @@ def build_prep_message(skip_games: list[sqlite3.Row]) -> str:
             lines.append(f"    • Pair {i + 1} (Sec {pair.section}/Row {pair.row}): ${price:.0f}")
         url, is_specific = sell_url(g)
         if is_specific:
-            lines.append(f"    → List this game: {url}")
+            lines.append(f"    → Open & Sell: {url}")
         else:
             any_generic = True
     lines.append("")
     if any_generic:
-        lines.append(f"List them here → {settings.ticketmaster_sell_url}")
+        lines.append(f"Find the rest here → {settings.ticketmaster_base_url}")
     lines.append("Then reply `listed all` (or `listed Tue, Thu`) once they're up.")
     return "\n".join(lines)

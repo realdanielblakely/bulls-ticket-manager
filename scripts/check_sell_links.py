@@ -38,8 +38,8 @@ def main() -> None:
             specific += 1
         print(f"  {g['day_of_week'][:3]} {d.month}/{d.day}  vs {g['opponent']}")
         print(f"      [{tag}] {url}")
-    print(f"\n{specific}/{len(games)} games have a saved per-game sell link.")
-    print("Save one with the Discord command:  link 4/2 https://...\n")
+    print(f"\n{specific}/{len(games)} games have a saved Ticketmaster event id.")
+    print("Save one with the Discord command:  link 6/30 1459  (id or full URL)\n")
 
 
 if __name__ == "__main__":

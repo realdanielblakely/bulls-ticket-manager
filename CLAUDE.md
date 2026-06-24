@@ -73,15 +73,20 @@ Bot name: **set in the Discord developer portal**
 | `app/dashboard/` | FastAPI + Jinja2 season view |
 | `schedule.csv` | 75 home games (Mar 31 – Sep 13 2026) |
 
-## Sell-link test (open item)
-The bot can hold a real **per-game** Ticketmaster sell link (`games.tm_sell_url`,
-set via the `link 4/2 <url>` Discord command) and uses it in the prep message,
-falling back to the generic `TICKETMASTER_SELL_URL` page when none is saved.
+## Ticketmaster sell links (resolved)
+The Bulls use Ticketmaster **Account Manager** (`am.ticketmaster.com/durhambulls/`,
+NOT ticketmaster.com). Confirmed by testing:
+- The **Sell flow has no URL** (in-page popup) — can't deep-link the sell form.
+- Each game **does** have a deep-linkable page: `{base}/{event_id}`
+  (e.g. `.../my-events/1459` = Jun 30). "Sell" is one tap from there.
 
-Whether per-game deep links actually survive being re-opened is the one thing we
-can't confirm from code — it needs the logged-in TM account. See
-[`TESTING.md`](TESTING.md) for the 2-minute procedure, and
-`python -m scripts.check_sell_links` to see which games have a saved link.
+So the bot stores each game's **event id** (`games.tm_event_id`), set via the
+`link 6/30 1459` command (accepts a bare id or a full URL), and the prep message
+links to `settings.event_url(event_id)`, falling back to the My Events list page
+(`TICKETMASTER_BASE_URL`) when no id is saved. Known id: **Jun 30 = 1459**.
+
+See [`TESTING.md`](TESTING.md); `python -m scripts.check_sell_links` lists which
+games have an id saved.
 
 ## History
 Originally designed around a StubHub seller API (`app/stubhub/`, never finished).

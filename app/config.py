@@ -67,13 +67,20 @@ class Settings:
     dashboard_host: str = os.getenv("DASHBOARD_HOST", "0.0.0.0")
     dashboard_port: int = int(os.getenv("DASHBOARD_PORT", "8080"))
 
-    # Ticketmaster — listing is a manual action (no public seller API), so this
-    # is just the link the prep message points you to. Defaults to the account
-    # "My Events" page; override once we confirm a working per-event sell deep
-    # link against the real account during testing.
-    ticketmaster_sell_url: str = os.getenv(
-        "TICKETMASTER_SELL_URL", "https://www.ticketmaster.com/myevents"
+    # Ticketmaster Account Manager — the Bulls' team portal (NOT ticketmaster.com).
+    # Listing is manual: the "Sell" flow is an in-page popup with no URL, so we
+    # can't deep-link the sell form itself. But each game has its own page at
+    # {base}/{event_id}, and "Sell" is one tap from there — so we link to the
+    # game page and store each game's event_id (see games.tm_event_id).
+    ticketmaster_base_url: str = os.getenv(
+        "TICKETMASTER_BASE_URL", "https://am.ticketmaster.com/durhambulls/my-events"
     )
+
+    def event_url(self, event_id: str | None) -> str:
+        """Link to a specific game's page (where 'Sell' lives), or the list page."""
+        if event_id:
+            return f"{self.ticketmaster_base_url}/{event_id}"
+        return self.ticketmaster_base_url
 
 
 settings = Settings()

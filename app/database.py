@@ -41,7 +41,7 @@ def create_tables() -> None:
                 status              TEXT DEFAULT 'upcoming',
                 listed_price        REAL,
                 sold_price          REAL,
-                tm_sell_url         TEXT,
+                tm_event_id         TEXT,
                 created_at          TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at          TEXT DEFAULT CURRENT_TIMESTAMP
             );
@@ -57,7 +57,7 @@ def create_tables() -> None:
     # Additive migrations — safe to re-run (no-op if the column already exists)
     with get_connection() as conn:
         for migration_sql in [
-            "ALTER TABLE games ADD COLUMN tm_sell_url TEXT",
+            "ALTER TABLE games ADD COLUMN tm_event_id TEXT",
         ]:
             try:
                 conn.execute(migration_sql)
@@ -104,12 +104,12 @@ def update_game_status(game_id: int, status: str) -> None:
         )
 
 
-def set_game_tm_url(game_id: int, url: str) -> None:
-    """Store the Ticketmaster 'sell this game' link for one game."""
+def set_game_tm_event_id(game_id: int, event_id: str) -> None:
+    """Store the Ticketmaster Account Manager event id for one game."""
     with get_connection() as conn:
         conn.execute(
-            "UPDATE games SET tm_sell_url=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-            (url, game_id),
+            "UPDATE games SET tm_event_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (event_id, game_id),
         )
 
 
