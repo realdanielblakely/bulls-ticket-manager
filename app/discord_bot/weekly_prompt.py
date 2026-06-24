@@ -27,7 +27,7 @@ def _format_prompt(games: list) -> str:
         lines.append(f"  {short_day} {short_date}  vs {g['opponent']}  {g['time']}")
 
     lines.append("")
-    lines.append("Reply with days to **SKIP** (I'll prep them for Ticketmaster resale).")
+    lines.append("Reply with days to **SKIP** (I'll ask list or transfer for each).")
     lines.append('Examples: `skip all` / `skip Tue, Thu` / `attending all`')
     return "\n".join(lines)
 

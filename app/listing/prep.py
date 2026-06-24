@@ -86,3 +86,30 @@ def build_prep_message(skip_games: list[sqlite3.Row]) -> str:
         lines.append(f"Find the rest here → {settings.ticketmaster_base_url}")
     lines.append("Then reply `listed all` (or `listed Tue, Thu`) once they're up.")
     return "\n".join(lines)
+
+
+def build_transfer_message(transfer_games: list[sqlite3.Row]) -> str:
+    """
+    Build the 'ready to transfer' message for games being handed to someone.
+
+    No price — transfers go to a specific person, not the resale market. Same
+    per-game page link as listing (Transfer is just a different button there).
+    Returns "" when there are no transfer games.
+    """
+    if not transfer_games:
+        return ""
+
+    lines = ["", "🔄 **Ready to transfer:**", ""]
+    any_generic = False
+    for g in transfer_games:
+        lines.append(f"  **{_short(g)}** vs {g['opponent']}")
+        url, is_specific = sell_url(g)
+        if is_specific:
+            lines.append(f"    → Open & Transfer: {url}")
+        else:
+            any_generic = True
+    lines.append("")
+    if any_generic:
+        lines.append(f"Find the rest here → {settings.ticketmaster_base_url}")
+    lines.append("Then reply `transferred all` (or `transferred Tue`) once sent.")
+    return "\n".join(lines)

@@ -1,22 +1,30 @@
 """
 Parse the owner's reply to the weekly prompt and update game statuses.
 
-Supported commands (case-insensitive, flexible punctuation):
-  skip all                 → mark all next-week upcoming games as 'skip'
-  attending all            → mark all next-week upcoming games as 'attending'
-  skip tue, thu            → mark Tue & Thu games as 'skip', rest as 'attending'
-  listed all               → mark skipped games as 'listed' (you finished on TM)
-  listed tue, 4/2          → mark specific skipped games as 'listed'
-  sold all / sold tue      → mark listed games as 'sold' (feeds P&L)
-  status                   → show current week's game statuses
-  help                     → show command reference
+The weekly decision is two-step now:
+  1. Attend or not:   `attending all` / `skip Tue, Thu` / `skip all`
+  2. For each skipped game the bot asks **list or transfer?**, and you answer:
+        `list Thu`         → list that game for resale (price + link prep)
+        `transfer Fri`     → transfer that game to someone (link prep, no price)
+        `list all` / `transfer all`
+        `list Thu, transfer Fri`   (one message, mixed)
 
-Day matching is fuzzy: "tue", "tues", "tuesday" all work. Confirm commands
-(`listed`/`sold`) also accept dates like "4/2".
+Then confirm once you've done it on Ticketmaster:
+        `listed Thu`       → it's live on the resale market
+        `sold Thu`         → it sold (feeds P&L)
+        `transferred Fri`  → you sent it
 
-Ticketmaster has no public API to auto-list, so skipping a game does NOT list
-it automatically. Instead the bot replies with a prep message (suggested price
-per seat pair + a link to finish on TM); you then confirm with `listed`.
+Other commands: `link 6/30 1459` (save a game's TM link), `status`, `help`.
+
+Day matching is fuzzy ("tue"/"tues"/"tuesday"). `listed`/`sold`/`transferred`
+also accept m/d dates like "7/2". Ticketmaster has no public listing API, so the
+bot never lists/transfers for you — it preps the decision + a link, you finish in
+the TM app, then confirm.
+
+Status flow:
+  upcoming → attending
+  upcoming → skip (decide) → to_list → listed → sold
+                           → to_transfer → transferred
 """
 
 import logging
@@ -33,11 +41,12 @@ from app.database import (
     log_activity,
     mark_listed,
     mark_sold,
+    mark_transferred,
     next_week_bounds,
     set_game_tm_event_id,
     update_game_status,
 )
-from app.listing.prep import build_prep_message, game_avg_price
+from app.listing.prep import build_prep_message, build_transfer_message, game_avg_price
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +61,10 @@ DAY_ALIASES: dict[str, str] = {
     "sun": "Sunday", "sunday": "Sunday",
 }
 
+# Words that set the action while scanning a disposition reply
+_LIST_WORDS = {"list", "listing", "resell", "sell"}
+_TRANSFER_WORDS = {"transfer", "transferring", "send", "give", "gift"}
+
 
 def _parse_days(text: str) -> list[str]:
     """Extract canonical day names from freeform text."""
@@ -65,7 +78,7 @@ def _parse_days(text: str) -> list[str]:
 
 
 def _parse_dates(text: str) -> list[tuple[int, int]]:
-    """Extract (month, day) pairs from text like '4/2'."""
+    """Extract (month, day) pairs from text like '7/2'."""
     return [(int(m), int(d)) for m, d in re.findall(r"\b(\d{1,2})/(\d{1,2})\b", text)]
 
 
@@ -83,13 +96,38 @@ def _select(candidates: list[sqlite3.Row], text: str) -> list[sqlite3.Row]:
     return out
 
 
+def _parse_dispositions(text: str) -> list[tuple[str, str]]:
+    """
+    Scan a list/transfer reply into (action, target) pairs, where action is
+    'to_list' or 'to_transfer' and target is a canonical day name or 'ALL'.
+
+    A verb word sets the current action; day/all words after it attach to it.
+    Handles `list thu, transfer fri`, `list all`, `transfer thu and fri`, etc.
+    """
+    assigns: list[tuple[str, str]] = []
+    current: str | None = None
+    for w in re.findall(r"[a-z]+", text.lower()):
+        if w in _LIST_WORDS:
+            current = "to_list"
+        elif w in _TRANSFER_WORDS:
+            current = "to_transfer"
+        elif current and w == "all":
+            assigns.append((current, "ALL"))
+        elif current and w in DAY_ALIASES:
+            assigns.append((current, DAY_ALIASES[w]))
+    return assigns
+
+
 def _status_emoji(status: str) -> str:
     return {
-        "attending": "✅",
-        "skip": "🟡",      # decided to sell, not yet listed
-        "listed": "🏷️",
-        "sold": "💰",
         "upcoming": "⬜",
+        "attending": "✅",
+        "skip": "🟡",          # decided not to attend — awaiting list/transfer
+        "to_list": "🏷️",
+        "listed": "📤",
+        "sold": "💰",
+        "to_transfer": "🔄",
+        "transferred": "🤝",
     }.get(status, "❓")
 
 
@@ -101,11 +139,17 @@ def _short(g: sqlite3.Row) -> str:
 def _status_label(g: sqlite3.Row) -> str:
     s = g["status"]
     if s == "skip":
+        return "DECIDE: list or transfer?"
+    if s == "to_list":
         return "TO LIST"
     if s == "listed":
         return f"LISTED (${g['listed_price']:.0f}/pair)" if g["listed_price"] else "LISTED"
     if s == "sold":
         return f"SOLD (${g['sold_price']:.0f})" if g["sold_price"] else "SOLD"
+    if s == "to_transfer":
+        return "TO TRANSFER"
+    if s == "transferred":
+        return "TRANSFERRED"
     return s.upper()
 
 
@@ -113,7 +157,6 @@ def _build_confirmation(games: list[sqlite3.Row]) -> str:
     lines = ["Got it! Here's your week:\n"]
     for g in games:
         lines.append(f"  {_status_emoji(g['status'])} {_short(g)}  vs {g['opponent']} — {_status_label(g)}")
-    lines.append("\nReply `skip <days>` to adjust, or `status` to check again.")
     return "\n".join(lines)
 
 
@@ -136,29 +179,39 @@ def _confirm_summary(verb: str, games: list[sqlite3.Row]) -> str:
     return "\n".join(lines)
 
 
-def _skip_reply(games: list[sqlite3.Row]) -> str:
-    """Confirmation for the week + the Ticketmaster listing prep for skipped games."""
-    reply = _build_confirmation(games)
-    skip_games = [g for g in games if g["status"] == "skip"]
-    prep = build_prep_message(skip_games)
-    return reply + ("\n" + prep if prep else "")
+def _ask_disposition(week_games: list[sqlite3.Row]) -> str:
+    """Week confirmation + the list-or-transfer question for pending (skip) games."""
+    reply = _build_confirmation(week_games)
+    pending = [g for g in week_games if g["status"] == "skip"]
+    if pending:
+        reply += "\n\n🤔 For each, reply **list** or **transfer**:\n"
+        for g in pending:
+            reply += f"  🟡 {_short(g)} vs {g['opponent']}\n"
+        reply += "e.g. `list thu, transfer fri`  ·  `list all`  ·  `transfer all`"
+    return reply
 
 
 HELP_TEXT = """
 🐂 **Bulls Ticket Manager — Commands**
 
-`skip all`          → mark all games next week to sell
-`attending all`     → keep all games next week
-`skip Tue, Thu`     → sell specific days (rest = attending)
-`listed all`        → confirm you listed them on Ticketmaster
-`listed Tue, 4/2`   → confirm specific games are listed
-`sold Tue`          → mark a game's tickets sold (feeds P&L)
-`link 6/30 1459`    → save a game's Ticketmaster link (id or full URL)
-`status`            → show next week's current decisions
-`help`              → show this message
+__Weekly decision__
+`attending all`     → keep every game next week
+`skip Tue, Thu`     → not attending those (I'll ask: list or transfer?)
+`skip all`          → not attending any next week
 
-Skipping a game doesn't auto-list (Ticketmaster has no API for that) — I'll
-send you the price + a link, you finish in the TM app, then reply `listed`.
+__When I ask "list or transfer?"__
+`list Thu`          → list that game for resale (I send price + link)
+`transfer Fri`      → transfer that game (I send the link)
+`list all` / `transfer all` · `list thu, transfer fri`
+
+__Confirm after you do it on Ticketmaster__
+`listed Thu`        → it's live for resale
+`sold Thu`          → it sold (feeds P&L)
+`transferred Fri`   → you sent it
+
+__Other__
+`link 6/30 1459`    → save a game's Ticketmaster link
+`status` · `help`
 """.strip()
 
 
@@ -195,7 +248,6 @@ async def handle_reply(message: discord.Message) -> None:
         if not dates:
             await message.channel.send("Use a date so I know which game: `link 6/30 1459`")
             return
-        # Derive the event id: a bare number, or the trailing /<digits> of a URL.
         if re.fullmatch(r"\d+", value):
             event_id = value
         else:
@@ -207,7 +259,7 @@ async def handle_reply(message: discord.Message) -> None:
                 "(`link 6/30 1459`) or the `.../my-events/1459` link."
             )
             return
-        candidates = get_next_games(limit=400)  # whole rest of the season
+        candidates = get_next_games(limit=400)
         targets = [
             g for g in candidates
             if (date.fromisoformat(g["date"]).month, date.fromisoformat(g["date"]).day) in dates
@@ -221,7 +273,7 @@ async def handle_reply(message: discord.Message) -> None:
         await message.channel.send(_confirm_summary(f"Saved TM link (#{event_id}) for", targets))
         return
 
-    # --- sold <days/dates/all> ---  (check before 'listed'/'skip')
+    # --- sold <days/dates/all> ---
     if re.search(r"\bsold\b", text):
         candidates = get_games_by_status(("listed",))
         targets = _select(candidates, text)
@@ -237,19 +289,39 @@ async def handle_reply(message: discord.Message) -> None:
         await message.channel.send(_confirm_summary("Sold", targets))
         return
 
-    # --- listed <days/dates/all> ---
-    if re.search(r"\blisted?\b", text):
-        candidates = get_games_by_status(("skip",))
+    # --- transferred <days/dates/all> ---  (before the 'transfer' disposition)
+    if re.search(r"\btransferred\b", text):
+        candidates = get_games_by_status(("to_transfer",))
         targets = _select(candidates, text)
         if not targets:
             await message.channel.send(
-                "Nothing to mark listed. Reply `skip <days>` first, or check `status`."
+                "Nothing to mark transferred. Pick `transfer <days>` first, or check `status`."
+            )
+            return
+        for g in targets:
+            mark_transferred(g["id"])
+            log_activity(g["id"], "transferred", {"source": "discord_reply"})
+        await message.channel.send(_confirm_summary("Transferred", targets))
+        return
+
+    # --- listed <days/dates/all> ---  (exact 'listed', before the 'list' disposition)
+    if re.search(r"\blisted\b", text):
+        candidates = get_games_by_status(("to_list",))
+        targets = _select(candidates, text)
+        if not targets:
+            await message.channel.send(
+                "Nothing to mark listed. Pick `list <days>` first, or check `status`."
             )
             return
         for g in targets:
             mark_listed(g["id"], game_avg_price(g["day_of_week"]))
             log_activity(g["id"], "listed", {"source": "discord_reply"})
         await message.channel.send(_confirm_summary("Listed", targets))
+        return
+
+    # --- disposition: list / transfer (answer to "list or transfer?") ---
+    if re.search(r"\blist\b", text) or re.search(r"\btransfer\b", text):
+        await _handle_disposition(text, message, monday, sunday)
         return
 
     # --- attending all ---
@@ -275,7 +347,7 @@ async def handle_reply(message: discord.Message) -> None:
                 update_game_status(g["id"], "skip")
                 log_activity(g["id"], "skipped", {"source": "discord_reply"})
         games = get_games_for_week(monday, sunday)
-        await message.channel.send(_skip_reply(games))
+        await message.channel.send(_ask_disposition(games))
         return
 
     # --- skip <specific days> ---
@@ -292,7 +364,7 @@ async def handle_reply(message: discord.Message) -> None:
 
         for g in games:
             if g["status"] not in ("upcoming", "attending", "skip"):
-                continue  # don't touch listed/sold games
+                continue  # don't touch games already being listed/transferred/sold
             if g["day_of_week"] in skip_days:
                 update_game_status(g["id"], "skip")
                 log_activity(g["id"], "skipped", {"source": "discord_reply", "matched_day": g["day_of_week"]})
@@ -301,10 +373,56 @@ async def handle_reply(message: discord.Message) -> None:
                 log_activity(g["id"], "attending", {"source": "discord_reply"})
 
         games = get_games_for_week(monday, sunday)
-        await message.channel.send(_skip_reply(games))
+        await message.channel.send(_ask_disposition(games))
         return
 
     # --- unrecognized ---
     await message.channel.send(
         "I didn't understand that. Reply `help` for a list of commands."
     )
+
+
+async def _handle_disposition(text: str, message: discord.Message, monday: date, sunday: date) -> None:
+    """Apply list/transfer choices, then send the matching prep + remind on leftovers."""
+    week_games = get_games_for_week(monday, sunday)
+    by_day = {g["day_of_week"]: g for g in week_games}
+    pending = [g for g in week_games if g["status"] == "skip"]
+
+    chosen: dict[int, str] = {}
+    for action, target in _parse_dispositions(text):
+        if target == "ALL":
+            for g in pending:
+                chosen[g["id"]] = action
+        else:
+            g = by_day.get(target)
+            # works as the answer to the question (skip) and as a direct shortcut
+            if g and g["status"] in ("upcoming", "attending", "skip"):
+                chosen[g["id"]] = action
+
+    if not chosen:
+        await message.channel.send(
+            "Tell me which way for each: `list thu, transfer fri`, or `list all` / `transfer all`."
+        )
+        return
+
+    for game_id, action in chosen.items():
+        update_game_status(game_id, action)
+        log_activity(game_id, action, {"source": "discord_reply"})
+
+    week_games = get_games_for_week(monday, sunday)
+    to_list = [g for g in week_games if g["status"] == "to_list"]
+    to_transfer = [g for g in week_games if g["status"] == "to_transfer"]
+
+    reply = _build_confirmation(week_games)
+    prep = build_prep_message(to_list)
+    if prep:
+        reply += "\n" + prep
+    transfer = build_transfer_message(to_transfer)
+    if transfer:
+        reply += "\n" + transfer
+
+    still = [g for g in week_games if g["status"] == "skip"]
+    if still:
+        reply += "\n\n⏳ Still need list/transfer for: " + ", ".join(_short(g) for g in still)
+
+    await message.channel.send(reply)

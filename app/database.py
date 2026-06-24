@@ -131,6 +131,15 @@ def mark_sold(game_id: int, sold_price: float) -> None:
         )
 
 
+def mark_transferred(game_id: int) -> None:
+    """Owner confirmed the game's tickets were transferred to someone."""
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE games SET status='transferred', updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (game_id,),
+        )
+
+
 def get_games_by_status(statuses: tuple[str, ...]) -> list[sqlite3.Row]:
     """Games from today forward in any of the given statuses (for confirm commands)."""
     placeholders = ",".join("?" * len(statuses))
@@ -181,8 +190,11 @@ def get_season_summary() -> dict:
         "upcoming": counts.get("upcoming", 0),
         "attending": counts.get("attending", 0),
         "skip": counts.get("skip", 0),
+        "to_list": counts.get("to_list", 0),
         "listed": counts.get("listed", 0),
         "sold": counts.get("sold", 0),
+        "to_transfer": counts.get("to_transfer", 0),
+        "transferred": counts.get("transferred", 0),
         "earnings": float(earnings_row["total"]) if earnings_row else 0.0,
     }
 

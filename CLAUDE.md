@@ -45,19 +45,29 @@ Bot name: **set in the Discord developer portal**
 - Default list price: $35/pair, weekend premium: +$5 (Fri/Sat)
 - All seat + pricing values come from `.env` (see `.env.example`)
 
-## Status Flow
-`upcoming → attending` (keep) **or** `upcoming → skip` (decided to sell)
-`skip → listed` (owner confirms after listing on TM)
-`listed → sold` (owner confirms sale; sold_price feeds P&L)
+## Status Flow (with the list/transfer action gate)
+`upcoming → attending` (keep)
+`upcoming → skip` (not attending — awaiting list/transfer decision)
+`skip → to_list → listed → sold`  (resale; sold_price feeds P&L)
+`skip → to_transfer → transferred` (handed to someone; no revenue by default)
+
+Two-step weekly decision: (1) attend or skip, then (2) for each skipped game the
+bot asks **list or transfer?** and the owner answers. Consign is intentionally
+not implemented (owner uses only list + transfer).
 
 ## Discord Commands (plain-text DMs)
-- `skip all` / `attending all`
-- `skip tue, thu` — skip specific days, rest auto-attending
-- `listed all` / `listed tue, 4/2` — confirm games are live on TM
-- `sold tue` — mark a listed game sold
-- `link 4/2 <url>` — save the Ticketmaster per-game sell link (per date)
+- `skip all` / `attending all` / `skip tue, thu` — step 1 (attend vs not)
+- `list thu` / `transfer fri` / `list all` / `transfer all` / `list thu, transfer fri`
+  — step 2 (answer to "list or transfer?"; also works as a direct shortcut)
+- `listed tue, 7/2` — confirm a to_list game is live on TM
+- `sold tue` — mark a listed game sold (feeds P&L)
+- `transferred fri` — mark a to_transfer game sent
+- `link 6/30 1459` — save a game's TM event id (per date)
 - `status` — next 7 games + statuses
 - `help`
+
+Command parse order matters: `sold` / `transferred` / `listed` are matched before
+the `transfer` / `list` disposition verbs (substring overlap).
 - Weekly cron: **Sunday 10:00 AM ET**
 
 ## Key Files

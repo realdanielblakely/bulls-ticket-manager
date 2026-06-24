@@ -22,11 +22,14 @@ templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 # ---------------------------------------------------------------------------
 
 _STATUS_META = {
-    "upcoming": {"label": "Upcoming",  "css": "bg-slate-600 text-slate-200"},
-    "attending": {"label": "Attending", "css": "bg-green-600 text-green-100"},
-    "skip":      {"label": "Skip",      "css": "bg-orange-500 text-orange-100"},
-    "listed":    {"label": "Listed",    "css": "bg-blue-600 text-blue-100"},
-    "sold":      {"label": "Sold",      "css": "bg-yellow-500 text-yellow-900"},
+    "upcoming":    {"label": "Upcoming",    "css": "bg-slate-600 text-slate-200"},
+    "attending":   {"label": "Attending",   "css": "bg-green-600 text-green-100"},
+    "skip":        {"label": "Decide",      "css": "bg-amber-500 text-amber-900"},
+    "to_list":     {"label": "To List",     "css": "bg-orange-500 text-orange-100"},
+    "listed":      {"label": "Listed",      "css": "bg-blue-600 text-blue-100"},
+    "sold":        {"label": "Sold",        "css": "bg-yellow-500 text-yellow-900"},
+    "to_transfer": {"label": "To Transfer", "css": "bg-purple-500 text-purple-100"},
+    "transferred": {"label": "Transferred", "css": "bg-fuchsia-600 text-fuchsia-100"},
 }
 
 
