@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────
-# push-to-server.sh — copy this app to the always-on always-on Mac.
+# push-to-server.sh — copy this app to the always-on Mac.
 #
 # Run from THIS Mac. rsyncs the repo to the box, shipping the .env (secrets)
 # and schedule.csv, but NOT the local venv / database / logs — those are

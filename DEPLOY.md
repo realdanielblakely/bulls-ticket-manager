@@ -1,6 +1,6 @@
-# Running on the always-on Mac
+# Running on an always-on Mac
 
-The bot runs on the always-on always-on Mac (`deploy@server.local`)
+The bot runs on the always-on Mac (`deploy@server.local`)
 instead of a paid host. macOS keeps it alive with **launchd**: it starts when the
 `deploy` user is logged in and restarts itself if it ever crashes.
 
@@ -46,8 +46,7 @@ ssh deploy@server.local 'cd bulls-ticket-manager && ./deploy/setup-on-box.sh'
   connection. Once it's on the box, don't also `python -m app.main` on this Mac —
   they'd fight over the connection. (Quick local tests are fine if the box copy
   is stopped first.)
-- **The MacBook must not sleep**, or the bot goes offline. It may already run
-  24/7, so this is probably handled; if not, keep it awake with:
+- **The host must not sleep**, or the bot goes offline. Keep it awake with:
   ```bash
   sudo pmset -a sleep 0 disablesleep 1     # or run under `caffeinate -s`
   ```
